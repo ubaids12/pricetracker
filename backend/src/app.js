@@ -1,0 +1,22 @@
+import express from 'express';
+import cors from 'cors';
+import productsRouter from './routes/products.routes.js';
+import historyRouter from './routes/history.routes.js';
+import logsRouter from './routes/logs.routes.js';
+import exportRouter from './routes/export.routes.js';
+import scrapeRouter from './routes/scrape.routes.js';
+import { logger } from './middleware/logger.js';
+import { errorHandler } from './middleware/errorHandler.js';
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+app.use(logger);
+app.get('/health', (_request, response) => response.json({ status: 'ok' }));
+app.use('/api/products', productsRouter);
+app.use('/api/history', historyRouter);
+app.use('/api/logs', logsRouter);
+app.use('/api/export', exportRouter);
+app.use('/api/scrape', scrapeRouter);
+app.use(errorHandler);
+export default app;

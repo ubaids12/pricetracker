@@ -1,0 +1,22 @@
+{
+  "name": "price-tracker-backend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "test": "node --test",
+    "db:verify": "node scripts/verifySupabase.js",
+    "db:seed": "node scripts/seedTrackedProducts.js"
+  },
+  "dependencies": {
+    "@supabase/server": "^1.8.0",
+    "@supabase/supabase-js": "latest",
+    "cheerio": "latest",
+    "cors": "latest",
+    "dotenv": "latest",
+    "express": "latest",
+    "playwright": "latest"
+  }
+}
