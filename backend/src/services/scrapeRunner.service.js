@@ -31,7 +31,7 @@ export async function runScrapeForTrackedProducts(options = {}) {
       })
     });
     const finishedAt = nowUtc();
-    if (result.outcome === 'success') {
+    if (result.outcome === 'success' && typeof result.price === 'number' && Number.isFinite(result.price) && result.price >= 0 && typeof result.inStock === 'boolean' && typeof (result.option || product.selected_option) === 'string') {
       await saveObservation({ product_id: product.id, selected_option: result.option || product.selected_option, price: result.price, in_stock: result.inStock, observed_at: finishedAt });
     }
     results.push({ productId: product.id, outcome: result.outcome, price: result.price, inStock: result.inStock });

@@ -9,11 +9,26 @@ const supabase = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false }
 });
 
-const products = [
-  { id: '2024', name: 'Redwick VR Headset One', optionId: 'o1', option: 'Standard' },
-  { id: '2108', name: 'Redwick Resistance Bands Go', optionId: 'o1', option: 'Starter' },
-  { id: '2850', name: 'Redwick LED Strip Zen', optionId: 'o1', option: 'Warm white' }
-];
+async function loadProducts(limit = 20) {
+  const products = [];
+  for (let page = 1; page <= 16 && products.length < limit; page += 1) {
+    const response = await fetch(`${env.storeBaseUrl}/api/v2/listings?page=${page}&limit=60`);
+    if (!response.ok) throw new Error(`Catalog request failed with HTTP ${response.status}`);
+    const payload = await response.json();
+    for (const listing of payload.results || []) {
+      if (products.length >= limit) break;
+      const detailsResponse = await fetch(`${env.storeBaseUrl}/api/v2/items/${listing.id}`);
+      if (!detailsResponse.ok) continue;
+      const details = await detailsResponse.json();
+      const option = details.options?.[0];
+      if (option) products.push({ id: String(details.id), name: details.name, optionId: option.id, option: option.label });
+    }
+  }
+  return products;
+}
+
+const products = await loadProducts(20);
+console.log(`Found ${products.length} products with selectable options.`);
 
 for (const product of products) {
   const row = {

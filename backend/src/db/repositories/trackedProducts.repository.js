@@ -1,4 +1,5 @@
 import { supabase } from '../../config/supabase.js';
+import { validateTrackedProduct } from '../../utils/validators.js';
 
 export async function listTrackedProducts() {
   if (!supabase) return [];
@@ -9,7 +10,7 @@ export async function listTrackedProducts() {
 
 export async function createTrackedProduct(product) {
   if (!supabase) throw new Error('Supabase is not configured');
-  const { data, error } = await supabase.from('tracked_products').insert(product).select().single();
+  const { data, error } = await supabase.from('tracked_products').insert(validateTrackedProduct(product)).select().single();
   if (error) throw error;
   return data;
 }

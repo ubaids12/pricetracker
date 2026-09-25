@@ -31,3 +31,6 @@ create table if not exists scrape_logs (
   started_at timestamptz not null default now(),
   finished_at timestamptz
 );
+
+create unique index if not exists tracked_products_option_unique_idx
+on tracked_products (store_product_id, coalesce(selected_option_id, selected_option));
