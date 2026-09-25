@@ -11,7 +11,7 @@ function localExecutablePath() {
 async function dismissConsent(page) {
 	const dialog = page.locator('[role="dialog"], .consent-box').first();
 	if (!await dialog.count()) return;
-	const action = dialog.getByRole('button', { name: /accept|agree|continue|necessary|reject/i }).first();
+	const action = dialog.getByRole('button', { name: /allow|accept|agree|continue|necessary|reject/i }).first();
 	if (await action.count()) await action.click({ timeout: 3000 }).catch(() => {});
 }
 
@@ -25,6 +25,37 @@ async function moveAcrossOffer(page, offerPanel) {
 		await page.waitForTimeout(50);
 	}
 	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+}
+
+async function unlockQuote(page, offerPanel, options) {
+	const maxAttempts = options.quoteAttempts || 4;
+	const checkPrice = page.getByRole('button', { name: /check today.?s price|check again|retry/i }).first();
+	let lastState = 'locked';
+
+	for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+		await moveAcrossOffer(page, offerPanel);
+		await page.waitForTimeout(options.hoverSettleMs || 1000);
+		if (!await checkPrice.isEnabled().catch(() => false)) {
+			await page.waitForTimeout(options.quoteRetryDelayMs || 1000);
+			continue;
+		}
+		await checkPrice.click();
+		try {
+			await page.waitForFunction(() => {
+				const panel = document.querySelector('.offer-panel');
+				const text = panel?.textContent?.toLowerCase() || '';
+				const hasPrice = Boolean(panel?.querySelector('[data-price], .offer-price, [class*="amount"], [class*="price"]')) || /[₹$€£]\s*[\d,]+/.test(text);
+				const failed = text.includes('challenge_failed') || text.includes("couldn’t load") || text.includes("couldn't load") || text.includes('retrying');
+				return panel && hasPrice && !panel.className.includes('offer-locked') && !text.includes('price locked') && !text.includes('loading') && !failed;
+			}, { timeout: options.priceTimeoutMs || 15000 });
+			return { unlocked: true, attempts: attempt };
+		} catch {
+			lastState = (await offerPanel.innerText().catch(() => 'locked')).slice(0, 160);
+			if (attempt < maxAttempts) await page.waitForTimeout(options.quoteRetryDelayMs || 1000);
+		}
+	}
+
+	throw new Error(`INE quote remained locked after ${maxAttempts} attempts: ${lastState}`);
 }
 
 export async function scrapeWithBrowser(target, options = {}) {
@@ -43,15 +74,9 @@ export async function scrapeWithBrowser(target, options = {}) {
 		}
 		const offerPanel = page.locator('.offer-panel').first();
 		if (await offerPanel.count()) {
-			await moveAcrossOffer(page, offerPanel);
-			await page.waitForTimeout(options.hoverSettleMs || 1000);
-			const checkPrice = page.getByRole('button', { name: /check today.?s price/i }).first();
-			if (await checkPrice.count() && await checkPrice.isEnabled().catch(() => false)) await checkPrice.click();
-			await page.waitForFunction(() => {
-				const panel = document.querySelector('.offer-panel');
-				const text = panel?.textContent?.toLowerCase() || '';
-				return panel && !panel.className.includes('offer-locked') && !text.includes('price locked') && !text.includes('loading');
-			}, { timeout: options.priceTimeoutMs || 15000 }).catch(() => {});
+			await unlockQuote(page, offerPanel, options);
+		} else {
+			throw new Error('INE product page did not contain an offer panel');
 		}
 		await page.waitForTimeout(options.settleMs || 500);
 		const html = await page.content();

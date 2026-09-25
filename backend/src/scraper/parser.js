@@ -27,7 +27,7 @@ function parseStock(value) {
 function parseOfferPanel($) {
 	const panel = $(selectors.offerPanel).first();
 	if (!panel.length || panel.hasClass('offer-locked')) return {};
-	const panelText = text(panel, '*');
+	const panelText = panel.text().replace(/\s+/g, ' ').trim();
 	const price = parsePrice(panelText);
 	const inStock = parseStock(panelText);
 	return { price, inStock };
