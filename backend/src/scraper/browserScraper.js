@@ -8,7 +8,7 @@ function localExecutablePath() {
 	}
 
 	// Use installed Chrome locally on Windows.
-	// On Render/Linux, Playwright will use its bundled Chromium.
+	// On Render/Linux, Playwright will use bundled Chromium.
 	if (process.platform !== 'win32') {
 		return undefined;
 	}
@@ -16,51 +16,145 @@ function localExecutablePath() {
 	return 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 }
 
+/* =========================================================
+   COOKIE / CONSENT HANDLING
+   ========================================================= */
+
 async function dismissConsent(page) {
 	console.log('Checking for consent dialog...');
 
+	console.log(
+		'Consent scrim count:',
+		await page.locator('.consent-scrim').count()
+	);
+
+	console.log(
+		'Consent buttons:',
+		await page.locator('.consent-scrim button').allTextContents()
+	);
+
+	// Look for common consent/dialog containers
 	const dialog = page
-		.locator('[role="dialog"], .consent-box')
+		.locator(
+			'[role="dialog"], .consent-box, .consent-modal, .cookie-banner, .cookie-modal'
+		)
 		.first();
 
-	if (!await dialog.count()) {
+	// Also check the scrim itself
+	const scrim = page.locator('.consent-scrim').first();
+
+	if (!(await dialog.count()) && !(await scrim.count())) {
 		console.log('No consent dialog found');
 		return;
 	}
 
-	const action = dialog
+	console.log('Consent element found');
+
+	// Try to find an accept/allow/agree button
+	const action = page
 		.getByRole('button', {
-			name: /allow|accept|agree|continue|necessary|reject/i
+			name: /accept|accept all|allow|agree|continue|necessary|got it|ok|okay/i
 		})
 		.first();
 
 	if (await action.count()) {
-		console.log('Consent dialog found. Clicking action...');
+		console.log('Consent button found');
+		console.log(
+			'Consent button text:',
+			await action.innerText().catch(() => '')
+		);
 
-		await action
-			.click({ timeout: 3000 })
-			.catch(() => {
-				console.log('Could not click consent button');
+		try {
+			await action.click({
+				timeout: 5000
 			});
+
+			console.log('Consent button clicked');
+		} catch (error) {
+			console.log(
+				'Normal consent click failed:',
+				error.message
+			);
+
+			// Try clicking with force only for the consent button itself
+			try {
+				await action.click({
+					timeout: 5000,
+					force: true
+				});
+
+				console.log('Consent button force-clicked');
+			} catch (forceError) {
+				console.log(
+					'Could not click consent button:',
+					forceError.message
+				);
+			}
+		}
+	} else {
+		console.log('No consent button found');
 	}
+
+	// Give the popup time to disappear
+	await page.waitForTimeout(500);
+
+	// Wait for scrim to disappear
+	const currentScrim = page.locator('.consent-scrim');
+
+	if (await currentScrim.count()) {
+		try {
+			await currentScrim.first().waitFor({
+				state: 'hidden',
+				timeout: 3000
+			});
+
+			console.log('Consent scrim disappeared');
+		} catch {
+			console.log(
+				'Consent scrim is still visible'
+			);
+		}
+	}
+
+	// Final diagnostic
+	console.log(
+		'Consent scrim count after handling:',
+		await page.locator('.consent-scrim').count()
+	);
 }
+
+/* =========================================================
+   MOVE ACROSS OFFER PANEL
+   ========================================================= */
 
 async function moveAcrossOffer(page, offerPanel) {
 	const box = await offerPanel.boundingBox();
 
 	if (!box) {
-		console.log('Offer panel has no bounding box');
+		console.log(
+			'Offer panel has no bounding box'
+		);
 		return;
 	}
 
-	await page.mouse.move(box.x - 20, box.y - 20);
+	await page.mouse.move(
+		box.x - 20,
+		box.y - 20
+	);
 
 	const steps = 20;
 
-	for (let step = 0; step <= steps; step += 1) {
+	for (
+		let step = 0;
+		step <= steps;
+		step += 1
+	) {
 		await page.mouse.move(
-			box.x + (box.width * step / steps),
-			box.y + box.height / 2
+			box.x +
+				(box.width * step) /
+					steps,
+			box.y +
+				box.height / 2
 		);
 
 		await page.waitForTimeout(50);
@@ -72,8 +166,17 @@ async function moveAcrossOffer(page, offerPanel) {
 	);
 }
 
-async function unlockQuote(page, offerPanel, options) {
-	const maxAttempts = options.quoteAttempts || 4;
+/* =========================================================
+   UNLOCK PRICE
+   ========================================================= */
+
+async function unlockQuote(
+	page,
+	offerPanel,
+	options
+) {
+	const maxAttempts =
+		options.quoteAttempts || 4;
 
 	const checkPrice = page
 		.getByRole('button', {
@@ -83,7 +186,9 @@ async function unlockQuote(page, offerPanel, options) {
 
 	let lastState = 'locked';
 
-	console.log(`Quote unlock attempts allowed: ${maxAttempts}`);
+	console.log(
+		`Quote unlock attempts allowed: ${maxAttempts}`
+	);
 
 	for (
 		let attempt = 1;
@@ -94,15 +199,33 @@ async function unlockQuote(page, offerPanel, options) {
 			`Quote unlock attempt ${attempt}/${maxAttempts}`
 		);
 
-		await moveAcrossOffer(page, offerPanel);
+		/*
+		 * Check cookie overlay again before every attempt.
+		 */
+		const consentScrim =
+			page.locator('.consent-scrim');
+
+		if (await consentScrim.count()) {
+			console.log(
+				'Consent scrim detected before price click'
+			);
+
+			await dismissConsent(page);
+		}
+
+		await moveAcrossOffer(
+			page,
+			offerPanel
+		);
 
 		await page.waitForTimeout(
 			options.hoverSettleMs || 1000
 		);
 
-		const enabled = await checkPrice
-			.isEnabled()
-			.catch(() => false);
+		const enabled =
+			await checkPrice
+				.isEnabled()
+				.catch(() => false);
 
 		console.log(
 			`Check price button enabled: ${enabled}`
@@ -120,11 +243,59 @@ async function unlockQuote(page, offerPanel, options) {
 			continue;
 		}
 
+		/*
+		 * Make sure consent overlay is gone
+		 * immediately before clicking.
+		 */
+		if (
+			await page
+				.locator('.consent-scrim')
+				.count()
+		) {
+			console.log(
+				'Consent overlay still present. Handling again...'
+			);
+
+			await dismissConsent(page);
+		}
+
 		console.log(
 			'Clicking check price button...'
 		);
 
-		await checkPrice.click();
+		try {
+			await checkPrice.click({
+				timeout: 10000
+			});
+		} catch (error) {
+			console.log(
+				'Normal price button click failed:',
+				error.message
+			);
+
+			/*
+			 * Do NOT blindly force-click the price button.
+			 * First verify whether the consent overlay
+			 * is blocking it.
+			 */
+			const blockingScrim =
+				page.locator('.consent-scrim');
+
+			if (await blockingScrim.count()) {
+				console.log(
+					'Consent scrim is blocking the price button'
+				);
+
+				await dismissConsent(page);
+
+				// Try normal click again
+				await checkPrice.click({
+					timeout: 10000
+				});
+			} else {
+				throw error;
+			}
+		}
 
 		try {
 			await page.waitForFunction(
@@ -144,7 +315,9 @@ async function unlockQuote(page, offerPanel, options) {
 								'[data-price], .offer-price, [class*="amount"], [class*="price"]'
 							)
 						) ||
-						/[$€£₹]\s*[\d,]+/.test(text);
+						/[$€£₹]\s*[\d,]+/.test(
+							text
+						);
 
 					const failed =
 						text.includes(
@@ -186,6 +359,22 @@ async function unlockQuote(page, offerPanel, options) {
 				'Price successfully unlocked'
 			);
 
+			console.log(
+				'Offer panel count after price unlock:',
+				await page
+					.locator('.offer-panel')
+					.count()
+			);
+
+			console.log(
+				'Offer panel text:',
+				await page
+					.locator('.offer-panel')
+					.first()
+					.innerText()
+					.catch(() => '')
+			);
+
 			return {
 				unlocked: true,
 				attempts: attempt
@@ -205,10 +394,12 @@ async function unlockQuote(page, offerPanel, options) {
 				`Current offer state: ${lastState}`
 			);
 
-			if (attempt < maxAttempts) {
+			if (
+				attempt < maxAttempts
+			) {
 				await page.waitForTimeout(
 					options.quoteRetryDelayMs ||
-					1000
+						1000
 				);
 			}
 		}
@@ -219,6 +410,10 @@ async function unlockQuote(page, offerPanel, options) {
 	);
 }
 
+/* =========================================================
+   MAIN BROWSER SCRAPER
+   ========================================================= */
+
 export async function scrapeWithBrowser(
 	target,
 	options = {}
@@ -228,9 +423,15 @@ export async function scrapeWithBrowser(
 			? { url: target }
 			: target;
 
-	console.log('=================================');
-	console.log('BROWSER SCRAPER STARTED');
-	console.log('=================================');
+	console.log(
+		'================================='
+	);
+	console.log(
+		'BROWSER SCRAPER STARTED'
+	);
+	console.log(
+		'================================='
+	);
 
 	console.log(
 		`Browser URL: ${product.url}`
@@ -242,7 +443,9 @@ export async function scrapeWithBrowser(
 		product.selectedOption;
 
 	console.log(
-		`Selected option: ${optionName || 'none'}`
+		`Selected option: ${
+			optionName || 'none'
+		}`
 	);
 
 	const executablePath =
@@ -264,22 +467,25 @@ export async function scrapeWithBrowser(
 		'Launching Playwright browser...'
 	);
 
-	const browser = await chromium.launch({
-		headless: options.headless ?? true,
-		executablePath
-	});
+	const browser =
+		await chromium.launch({
+			headless:
+				options.headless ?? true,
+			executablePath
+		});
 
 	console.log(
 		'Playwright browser launched'
 	);
 
 	try {
-		const page = await browser.newPage({
-			viewport: {
-				width: 1440,
-				height: 900
-			}
-		});
+		const page =
+			await browser.newPage({
+				viewport: {
+					width: 1440,
+					height: 900
+				}
+			});
 
 		console.log(
 			'New browser page created'
@@ -289,19 +495,24 @@ export async function scrapeWithBrowser(
 			'Opening product page...'
 		);
 
-		await page.goto(product.url, {
-			waitUntil: 'domcontentloaded',
-			timeout:
-				options.timeoutMs || 30000
-		});
+		await page.goto(
+			product.url,
+			{
+				waitUntil:
+					'domcontentloaded',
+				timeout:
+					options.timeoutMs ||
+					30000
+			}
+		);
 
 		console.log(
 			'Product page loaded'
 		);
 
-		// ============================================
-		// DEBUG INFORMATION - INITIAL PAGE
-		// ============================================
+		/* =========================================
+		   DEBUG COOKIE / CONSENT
+		   ========================================= */
 
 		console.log(
 			'Page title:',
@@ -316,6 +527,22 @@ export async function scrapeWithBrowser(
 		);
 
 		console.log(
+			'Consent scrim count:',
+			await page
+				.locator('.consent-scrim')
+				.count()
+		);
+
+		console.log(
+			'Consent buttons:',
+			await page
+				.locator(
+					'.consent-scrim button'
+				)
+				.allTextContents()
+		);
+
+		console.log(
 			'Body text preview:',
 			(
 				await page
@@ -324,9 +551,9 @@ export async function scrapeWithBrowser(
 			).slice(0, 2000)
 		);
 
-		// ============================================
-		// END INITIAL DEBUG INFORMATION
-		// ============================================
+		/* =========================================
+		   HANDLE COOKIE POPUP
+		   ========================================= */
 
 		await dismissConsent(page);
 
@@ -335,16 +562,23 @@ export async function scrapeWithBrowser(
 		);
 
 		await page
-			.waitForLoadState('networkidle', {
-				timeout:
-					options.networkIdleTimeoutMs ||
-					8000
-			})
+			.waitForLoadState(
+				'networkidle',
+				{
+					timeout:
+						options.networkIdleTimeoutMs ||
+						8000
+				}
+			)
 			.catch(() => {
 				console.log(
 					'Network idle timeout reached; continuing'
 				);
 			});
+
+		/* =========================================
+		   OPTIONAL SELECTOR
+		   ========================================= */
 
 		if (options.waitForSelector) {
 			console.log(
@@ -359,23 +593,24 @@ export async function scrapeWithBrowser(
 			);
 		}
 
-		// ============================================
-		// SELECT PRODUCT OPTION
-		// ============================================
+		/* =========================================
+		   SELECT PRODUCT OPTION
+		   ========================================= */
 
 		if (optionName) {
 			console.log(
 				`Looking for selected option: ${optionName}`
 			);
 
-			const option = page
-				.locator(
-					'.opt-chip, [data-option]'
-				)
-				.filter({
-					hasText: optionName
-				})
-				.first();
+			const option =
+				page
+					.locator(
+						'.opt-chip, [data-option]'
+					)
+					.filter({
+						hasText: optionName
+					})
+					.first();
 
 			if (await option.count()) {
 				console.log(
@@ -386,11 +621,12 @@ export async function scrapeWithBrowser(
 					timeout: 5000
 				});
 
-				// Give the page time to update
-				await page.waitForTimeout(500);
-
 				console.log(
 					`Option ${optionName} selected`
+				);
+
+				await page.waitForTimeout(
+					300
 				);
 			} else {
 				console.log(
@@ -399,9 +635,9 @@ export async function scrapeWithBrowser(
 			}
 		}
 
-		// ============================================
-		// DEBUG INFORMATION - AFTER OPTION SELECTION
-		// ============================================
+		/* =========================================
+		   OFFER PANEL
+		   ========================================= */
 
 		console.log(
 			'Offer panel count after option selection:',
@@ -416,12 +652,8 @@ export async function scrapeWithBrowser(
 				await page
 					.locator('body')
 					.innerText()
-			).slice(0, 2000)
+			).slice(0, 2500)
 		);
-
-		// ============================================
-		// END DEBUG INFORMATION
-		// ============================================
 
 		console.log(
 			'Looking for offer panel...'
@@ -432,7 +664,9 @@ export async function scrapeWithBrowser(
 				.locator('.offer-panel')
 				.first();
 
-		if (await offerPanel.count()) {
+		if (
+			await offerPanel.count()
+		) {
 			console.log(
 				'Offer panel found'
 			);
@@ -460,27 +694,9 @@ export async function scrapeWithBrowser(
 			options.settleMs || 500
 		);
 
-		// ============================================
-		// DEBUG INFORMATION - AFTER PRICE UNLOCK
-		// ============================================
-
-		console.log(
-			'Offer panel count after price unlock:',
-			await page
-				.locator('.offer-panel')
-				.count()
-		);
-
-		console.log(
-			'Offer panel text:',
-			await offerPanel
-				.innerText()
-				.catch(() => 'Unable to read offer panel')
-		);
-
-		// ============================================
-		// END DEBUG INFORMATION
-		// ============================================
+		/* =========================================
+		   FINAL HTML
+		   ========================================= */
 
 		console.log(
 			'Reading final page HTML...'
