@@ -19,7 +19,9 @@ function localExecutablePath() {
 async function dismissConsent(page) {
 	console.log('Checking for consent dialog...');
 
-	const dialog = page.locator('[role="dialog"], .consent-box').first();
+	const dialog = page
+		.locator('[role="dialog"], .consent-box')
+		.first();
 
 	if (!await dialog.count()) {
 		console.log('No consent dialog found');
@@ -83,8 +85,14 @@ async function unlockQuote(page, offerPanel, options) {
 
 	console.log(`Quote unlock attempts allowed: ${maxAttempts}`);
 
-	for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-		console.log(`Quote unlock attempt ${attempt}/${maxAttempts}`);
+	for (
+		let attempt = 1;
+		attempt <= maxAttempts;
+		attempt += 1
+	) {
+		console.log(
+			`Quote unlock attempt ${attempt}/${maxAttempts}`
+		);
 
 		await moveAcrossOffer(page, offerPanel);
 
@@ -96,10 +104,14 @@ async function unlockQuote(page, offerPanel, options) {
 			.isEnabled()
 			.catch(() => false);
 
-		console.log(`Check price button enabled: ${enabled}`);
+		console.log(
+			`Check price button enabled: ${enabled}`
+		);
 
 		if (!enabled) {
-			console.log('Check price button is disabled');
+			console.log(
+				'Check price button is disabled'
+			);
 
 			await page.waitForTimeout(
 				options.quoteRetryDelayMs || 1000
@@ -108,17 +120,23 @@ async function unlockQuote(page, offerPanel, options) {
 			continue;
 		}
 
-		console.log('Clicking check price button...');
+		console.log(
+			'Clicking check price button...'
+		);
 
 		await checkPrice.click();
 
 		try {
 			await page.waitForFunction(
 				() => {
-					const panel = document.querySelector('.offer-panel');
+					const panel =
+						document.querySelector(
+							'.offer-panel'
+						);
 
 					const text =
-						panel?.textContent?.toLowerCase() || '';
+						panel?.textContent
+							?.toLowerCase() || '';
 
 					const hasPrice =
 						Boolean(
@@ -129,26 +147,44 @@ async function unlockQuote(page, offerPanel, options) {
 						/[$€£₹]\s*[\d,]+/.test(text);
 
 					const failed =
-						text.includes('challenge_failed') ||
-						text.includes('couldn’t load') ||
-						text.includes("couldn't load") ||
-						text.includes('retrying');
+						text.includes(
+							'challenge_failed'
+						) ||
+						text.includes(
+							'couldn’t load'
+						) ||
+						text.includes(
+							"couldn't load"
+						) ||
+						text.includes(
+							'retrying'
+						);
 
 					return (
 						panel &&
 						hasPrice &&
-						!panel.className.includes('offer-locked') &&
-						!text.includes('price locked') &&
-						!text.includes('loading') &&
+						!panel.className.includes(
+							'offer-locked'
+						) &&
+						!text.includes(
+							'price locked'
+						) &&
+						!text.includes(
+							'loading'
+						) &&
 						!failed
 					);
 				},
 				{
-					timeout: options.priceTimeoutMs || 15000
+					timeout:
+						options.priceTimeoutMs ||
+						15000
 				}
 			);
 
-			console.log('Price successfully unlocked');
+			console.log(
+				'Price successfully unlocked'
+			);
 
 			return {
 				unlocked: true,
@@ -171,7 +207,8 @@ async function unlockQuote(page, offerPanel, options) {
 
 			if (attempt < maxAttempts) {
 				await page.waitForTimeout(
-					options.quoteRetryDelayMs || 1000
+					options.quoteRetryDelayMs ||
+					1000
 				);
 			}
 		}
@@ -182,7 +219,10 @@ async function unlockQuote(page, offerPanel, options) {
 	);
 }
 
-export async function scrapeWithBrowser(target, options = {}) {
+export async function scrapeWithBrowser(
+	target,
+	options = {}
+) {
 	const product =
 		typeof target === 'string'
 			? { url: target }
@@ -192,7 +232,9 @@ export async function scrapeWithBrowser(target, options = {}) {
 	console.log('BROWSER SCRAPER STARTED');
 	console.log('=================================');
 
-	console.log(`Browser URL: ${product.url}`);
+	console.log(
+		`Browser URL: ${product.url}`
+	);
 
 	const optionName =
 		product.selectedOption?.name ||
@@ -212,17 +254,24 @@ export async function scrapeWithBrowser(target, options = {}) {
 	);
 
 	console.log(
-		`Executable path: ${executablePath || 'Playwright bundled Chromium'}`
+		`Executable path: ${
+			executablePath ||
+			'Playwright bundled Chromium'
+		}`
 	);
 
-	console.log('Launching Playwright browser...');
+	console.log(
+		'Launching Playwright browser...'
+	);
 
 	const browser = await chromium.launch({
 		headless: options.headless ?? true,
 		executablePath
 	});
 
-	console.log('Playwright browser launched');
+	console.log(
+		'Playwright browser launched'
+	);
 
 	try {
 		const page = await browser.newPage({
@@ -232,45 +281,64 @@ export async function scrapeWithBrowser(target, options = {}) {
 			}
 		});
 
-		console.log('New browser page created');
+		console.log(
+			'New browser page created'
+		);
 
-		console.log('Opening product page...');
+		console.log(
+			'Opening product page...'
+		);
 
 		await page.goto(product.url, {
 			waitUntil: 'domcontentloaded',
-			timeout: options.timeoutMs || 30000
+			timeout:
+				options.timeoutMs || 30000
 		});
 
-		console.log('Product page loaded');
+		console.log(
+			'Product page loaded'
+		);
 
 		// ============================================
-		// DEBUG INFORMATION
+		// DEBUG INFORMATION - INITIAL PAGE
 		// ============================================
-
-		console.log('Page title:', await page.title());
 
 		console.log(
-			'Offer panel count:',
-			await page.locator('.offer-panel').count()
+			'Page title:',
+			await page.title()
+		);
+
+		console.log(
+			'Initial offer panel count:',
+			await page
+				.locator('.offer-panel')
+				.count()
 		);
 
 		console.log(
 			'Body text preview:',
-			(await page.locator('body').innerText()).slice(0, 2000)
+			(
+				await page
+					.locator('body')
+					.innerText()
+			).slice(0, 2000)
 		);
 
 		// ============================================
-		// END DEBUG INFORMATION
+		// END INITIAL DEBUG INFORMATION
 		// ============================================
 
 		await dismissConsent(page);
 
-		console.log('Waiting for network idle...');
+		console.log(
+			'Waiting for network idle...'
+		);
 
 		await page
 			.waitForLoadState('networkidle', {
 				timeout:
-					options.networkIdleTimeoutMs || 8000
+					options.networkIdleTimeoutMs ||
+					8000
 			})
 			.catch(() => {
 				console.log(
@@ -291,13 +359,19 @@ export async function scrapeWithBrowser(target, options = {}) {
 			);
 		}
 
+		// ============================================
+		// SELECT PRODUCT OPTION
+		// ============================================
+
 		if (optionName) {
 			console.log(
 				`Looking for selected option: ${optionName}`
 			);
 
 			const option = page
-				.locator('.opt-chip, [data-option]')
+				.locator(
+					'.opt-chip, [data-option]'
+				)
 				.filter({
 					hasText: optionName
 				})
@@ -311,6 +385,13 @@ export async function scrapeWithBrowser(target, options = {}) {
 				await option.click({
 					timeout: 5000
 				});
+
+				// Give the page time to update
+				await page.waitForTimeout(500);
+
+				console.log(
+					`Option ${optionName} selected`
+				);
 			} else {
 				console.log(
 					`Selected option not found: ${optionName}`
@@ -318,13 +399,43 @@ export async function scrapeWithBrowser(target, options = {}) {
 			}
 		}
 
-		console.log('Looking for offer panel...');
+		// ============================================
+		// DEBUG INFORMATION - AFTER OPTION SELECTION
+		// ============================================
+
+		console.log(
+			'Offer panel count after option selection:',
+			await page
+				.locator('.offer-panel')
+				.count()
+		);
+
+		console.log(
+			'Body text after option selection:',
+			(
+				await page
+					.locator('body')
+					.innerText()
+			).slice(0, 2000)
+		);
+
+		// ============================================
+		// END DEBUG INFORMATION
+		// ============================================
+
+		console.log(
+			'Looking for offer panel...'
+		);
 
 		const offerPanel =
-			page.locator('.offer-panel').first();
+			page
+				.locator('.offer-panel')
+				.first();
 
 		if (await offerPanel.count()) {
-			console.log('Offer panel found');
+			console.log(
+				'Offer panel found'
+			);
 
 			console.log(
 				'Attempting to unlock product price...'
@@ -349,26 +460,65 @@ export async function scrapeWithBrowser(target, options = {}) {
 			options.settleMs || 500
 		);
 
-		console.log('Reading final page HTML...');
+		// ============================================
+		// DEBUG INFORMATION - AFTER PRICE UNLOCK
+		// ============================================
 
-		const html = await page.content();
-
-		console.log('Parsing product HTML...');
-
-		const parsed = parseProductHtml(
-			html,
-			{
-				selectedOption:
-					product.selectedOption
-			}
+		console.log(
+			'Offer panel count after price unlock:',
+			await page
+				.locator('.offer-panel')
+				.count()
 		);
 
-		console.log('Browser scrape result:');
+		console.log(
+			'Offer panel text:',
+			await offerPanel
+				.innerText()
+				.catch(() => 'Unable to read offer panel')
+		);
+
+		// ============================================
+		// END DEBUG INFORMATION
+		// ============================================
+
+		console.log(
+			'Reading final page HTML...'
+		);
+
+		const html =
+			await page.content();
+
+		console.log(
+			'Parsing product HTML...'
+		);
+
+		const parsed =
+			parseProductHtml(
+				html,
+				{
+					selectedOption:
+						product.selectedOption
+				}
+			);
+
+		console.log(
+			'Browser scrape result:'
+		);
+
 		console.log(parsed);
 
-		console.log('=================================');
-		console.log('BROWSER SCRAPER FINISHED');
-		console.log('=================================');
+		console.log(
+			'================================='
+		);
+
+		console.log(
+			'BROWSER SCRAPER FINISHED'
+		);
+
+		console.log(
+			'================================='
+		);
 
 		return {
 			url: product.url,
@@ -376,10 +526,14 @@ export async function scrapeWithBrowser(target, options = {}) {
 			...parsed
 		};
 	} finally {
-		console.log('Closing Playwright browser...');
+		console.log(
+			'Closing Playwright browser...'
+		);
 
 		await browser.close();
 
-		console.log('Playwright browser closed');
+		console.log(
+			'Playwright browser closed'
+		);
 	}
 }
