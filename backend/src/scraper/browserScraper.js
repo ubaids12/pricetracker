@@ -243,6 +243,26 @@ export async function scrapeWithBrowser(target, options = {}) {
 
 		console.log('Product page loaded');
 
+		// ============================================
+		// DEBUG INFORMATION
+		// ============================================
+
+		console.log('Page title:', await page.title());
+
+		console.log(
+			'Offer panel count:',
+			await page.locator('.offer-panel').count()
+		);
+
+		console.log(
+			'Body text preview:',
+			(await page.locator('body').innerText()).slice(0, 2000)
+		);
+
+		// ============================================
+		// END DEBUG INFORMATION
+		// ============================================
+
 		await dismissConsent(page);
 
 		console.log('Waiting for network idle...');
